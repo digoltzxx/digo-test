@@ -1,0 +1,2348 @@
+openapi: 3.0.3
+info:
+  title: Royal Pay Gateway API
+  version: 1.0.0
+  description: |
+    API oficial do gateway de pagamentos Royal Pay.
+    
+    ## Introdução
+    A API Royal Pay permite que você integre pagamentos, checkouts, assinaturas, 
+    splits de comissão e muito mais em sua aplicação.
+    
+    ## Autenticação
+    Todas as requisições devem incluir um token Bearer no header Authorization.
+    
+    ## Ambientes
+    - **Produção**: `https://api.royalpay.com.br`
+    - **Sandbox**: `https://sandbox.royalpay.com.br`
+    
+    ## Versionamento
+    A API usa versionamento via URL. A versão atual é v1.
+    Novas versões não quebram compatibilidade com versões anteriores.
+    
+  contact:
+    name: Suporte Royal Pay
+    email: suporte@royalpay.com.br
+    url: https://royalpay.com.br/suporte
+  license:
+    name: Proprietário
+    url: https://royalpay.com.br/termos
+
+servers:
+  - url: https://api.royalpay.com.br/v1
+    description: Produção
+  - url: https://sandbox.royalpay.com.br/v1
+    description: Sandbox (testes)
+
+tags:
+  - name: Autenticação
+    description: Endpoints de autenticação e gestão de API Keys
+  - name: Checkout
+    description: Criação e gestão de sessões de checkout
+  - name: Transações
+    description: Gestão de transações e pagamentos
+  - name: Clientes
+    description: Cadastro e gestão de clientes
+  - name: Produtos
+    description: Gestão de produtos e preços
+  - name: Assinaturas
+    description: Gestão de assinaturas recorrentes
+  - name: Cupons
+    description: Criação e validação de cupons de desconto
+  - name: Split
+    description: Divisão de pagamentos e comissões
+  - name: Saques
+    description: Solicitação e gestão de saques
+  - name: Antecipações
+    description: Antecipação de recebíveis
+  - name: Webhooks
+    description: Configuração e gestão de webhooks
+  - name: Pixels
+    description: Rastreamento de conversões
+  - name: Prova Social
+    description: Notificações de prova social
+  - name: Calendário
+    description: Eventos e agendamentos
+  - name: Auditoria
+    description: Logs e auditoria financeira
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ==================== AUTENTICAÇÃO ====================
+  /auth/token:
+    post:
+      tags: [Autenticação]
+      summary: Gerar token de acesso
+      description: Gera um token JWT para autenticação nas requisições
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthTokenRequest'
+            example:
+              api_key: "sk_live_abc123..."
+              api_secret: "secret_xyz789..."
+      responses:
+        '200':
+          description: Token gerado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                token_type: "Bearer"
+                expires_in: 3600
+                scope: "read write"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/keys:
+    get:
+      tags: [Autenticação]
+      summary: Listar API Keys
+      description: Lista todas as API Keys ativas da conta
+      responses:
+        '200':
+          description: Lista de API Keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKey'
+    post:
+      tags: [Autenticação]
+      summary: Criar API Key
+      description: Cria uma nova API Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: API Key criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyCreated'
+
+  # ==================== CHECKOUT ====================
+  /checkout/sessions:
+    post:
+      tags: [Checkout]
+      summary: Criar sessão de checkout
+      description: |
+        Cria uma nova sessão de checkout para o cliente realizar o pagamento.
+        
+        **Importante**: O checkout expira após 30 minutos de inatividade.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCheckoutRequest'
+            example:
+              product_id: "prod_abc123"
+              success_url: "https://seusite.com/sucesso"
+              cancel_url: "https://seusite.com/cancelado"
+              customer:
+                name: "João Silva"
+                email: "joao@email.com"
+                document: "12345678900"
+              metadata:
+                order_id: "pedido_123"
+      responses:
+        '201':
+          description: Sessão de checkout criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+              example:
+                id: "cs_abc123"
+                url: "https://checkout.royalpay.com.br/cs_abc123"
+                status: "open"
+                amount: 49700
+                currency: "BRL"
+                expires_at: "2026-01-07T12:30:00Z"
+                product:
+                  id: "prod_abc123"
+                  name: "Curso Marketing Pro"
+                customer:
+                  name: "João Silva"
+                  email: "joao@email.com"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /checkout/sessions/{session_id}:
+    get:
+      tags: [Checkout]
+      summary: Buscar sessão de checkout
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "cs_abc123"
+      responses:
+        '200':
+          description: Sessão encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /checkout/sessions/{session_id}/expire:
+    post:
+      tags: [Checkout]
+      summary: Expirar sessão de checkout
+      description: Força a expiração imediata de uma sessão de checkout
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sessão expirada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== TRANSAÇÕES ====================
+  /transactions:
+    get:
+      tags: [Transações]
+      summary: Listar transações
+      description: Lista todas as transações com paginação e filtros
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, paid, failed, refunded, chargeback]
+        - name: payment_method
+          in: query
+          schema:
+            type: string
+            enum: [pix, credit_card, boleto]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Lista de transações
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionList'
+
+    post:
+      tags: [Transações]
+      summary: Criar transação
+      description: |
+        Cria uma nova transação de pagamento.
+        
+        **Métodos de pagamento suportados**:
+        - `pix`: Pagamento instantâneo via QR Code
+        - `credit_card`: Cartão de crédito (até 12x)
+        - `boleto`: Boleto bancário (vencimento em 3 dias)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransactionRequest'
+            examples:
+              pix:
+                summary: Pagamento PIX
+                value:
+                  amount: 10000
+                  payment_method: "pix"
+                  customer:
+                    name: "João Silva"
+                    email: "joao@email.com"
+                    document: "12345678900"
+              credit_card:
+                summary: Cartão de Crédito
+                value:
+                  amount: 10000
+                  payment_method: "credit_card"
+                  installments: 3
+                  card:
+                    number: "4111111111111111"
+                    holder_name: "JOAO SILVA"
+                    exp_month: "12"
+                    exp_year: "2028"
+                    cvv: "123"
+                  customer:
+                    name: "João Silva"
+                    email: "joao@email.com"
+                    document: "12345678900"
+      responses:
+        '201':
+          description: Transação criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /transactions/{transaction_id}:
+    get:
+      tags: [Transações]
+      summary: Buscar transação
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "tx_abc123"
+      responses:
+        '200':
+          description: Transação encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /transactions/{transaction_id}/refund:
+    post:
+      tags: [Transações]
+      summary: Estornar transação
+      description: |
+        Realiza o estorno total ou parcial de uma transação.
+        
+        **Regras**:
+        - Estorno total: omita o campo `amount`
+        - Estorno parcial: informe o valor em centavos
+        - Prazo máximo: 180 dias após a transação
+      parameters:
+        - name: transaction_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+      responses:
+        '200':
+          description: Estorno realizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== CUPONS ====================
+  /coupons:
+    get:
+      tags: [Cupons]
+      summary: Listar cupons
+      responses:
+        '200':
+          description: Lista de cupons
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponList'
+
+    post:
+      tags: [Cupons]
+      summary: Criar cupom
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCouponRequest'
+            example:
+              code: "DESCONTO20"
+              discount_type: "percentage"
+              discount_value: 20
+              max_uses: 100
+              min_order_value: 5000
+              starts_at: "2026-01-01T00:00:00Z"
+              ends_at: "2026-12-31T23:59:59Z"
+              product_ids: ["prod_abc123"]
+      responses:
+        '201':
+          description: Cupom criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+
+  /coupons/validate:
+    post:
+      tags: [Cupons]
+      summary: Validar cupom
+      description: Verifica se um cupom é válido para um produto/valor específico
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateCouponRequest'
+            example:
+              code: "DESCONTO20"
+              product_id: "prod_abc123"
+              amount: 49700
+      responses:
+        '200':
+          description: Cupom válido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponValidation'
+              example:
+                valid: true
+                coupon:
+                  code: "DESCONTO20"
+                  discount_type: "percentage"
+                  discount_value: 20
+                discount_amount: 9940
+                final_amount: 39760
+
+  /coupons/{coupon_id}:
+    get:
+      tags: [Cupons]
+      summary: Buscar cupom
+      parameters:
+        - name: coupon_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cupom encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+
+    patch:
+      tags: [Cupons]
+      summary: Atualizar cupom
+      parameters:
+        - name: coupon_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCouponRequest'
+      responses:
+        '200':
+          description: Cupom atualizado
+
+    delete:
+      tags: [Cupons]
+      summary: Desativar cupom
+      parameters:
+        - name: coupon_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cupom desativado
+
+  # ==================== SPLIT / COMISSÕES ====================
+  /splits:
+    get:
+      tags: [Split]
+      summary: Listar regras de split
+      responses:
+        '200':
+          description: Lista de regras de split
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SplitRuleList'
+
+    post:
+      tags: [Split]
+      summary: Criar regra de split
+      description: |
+        Cria uma regra de divisão de pagamentos.
+        
+        **Tipos de split**:
+        - `percentage`: Porcentagem do valor
+        - `fixed`: Valor fixo em centavos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSplitRuleRequest'
+            example:
+              product_id: "prod_abc123"
+              splits:
+                - recipient_id: "rec_produtor"
+                  type: "percentage"
+                  value: 70
+                - recipient_id: "rec_coprodutor"
+                  type: "percentage"
+                  value: 20
+                - recipient_id: "rec_plataforma"
+                  type: "percentage"
+                  value: 10
+      responses:
+        '201':
+          description: Regra de split criada
+
+  /commissions:
+    get:
+      tags: [Split]
+      summary: Listar comissões
+      description: Lista todas as comissões geradas por vendas
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, available, anticipated, withdrawn]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Lista de comissões
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommissionList'
+
+  # ==================== SAQUES ====================
+  /withdrawals:
+    get:
+      tags: [Saques]
+      summary: Listar saques
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, processing, completed, failed, cancelled]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Lista de saques
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithdrawalList'
+
+    post:
+      tags: [Saques]
+      summary: Solicitar saque
+      description: |
+        Solicita um saque do saldo disponível.
+        
+        **Regras**:
+        - Valor mínimo: R$ 20,00
+        - Taxa: R$ 3,50 por saque
+        - Prazo: 1-2 dias úteis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWithdrawalRequest'
+            example:
+              amount: 100000
+              bank_account_id: "ba_abc123"
+      responses:
+        '201':
+          description: Saque solicitado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Withdrawal'
+        '400':
+          description: Saldo insuficiente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: "insufficient_balance"
+                  message: "Saldo insuficiente para o saque solicitado"
+
+  /withdrawals/{withdrawal_id}:
+    get:
+      tags: [Saques]
+      summary: Buscar saque
+      parameters:
+        - name: withdrawal_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Saque encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Withdrawal'
+
+  /withdrawals/{withdrawal_id}/cancel:
+    post:
+      tags: [Saques]
+      summary: Cancelar saque
+      description: Cancela um saque pendente
+      parameters:
+        - name: withdrawal_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Saque cancelado
+        '400':
+          description: Saque não pode ser cancelado
+
+  # ==================== ANTECIPAÇÕES ====================
+  /anticipations:
+    get:
+      tags: [Antecipações]
+      summary: Listar antecipações
+      responses:
+        '200':
+          description: Lista de antecipações
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnticipationList'
+
+    post:
+      tags: [Antecipações]
+      summary: Solicitar antecipação
+      description: |
+        Solicita antecipação de recebíveis futuros.
+        
+        **Regras**:
+        - Taxa: 3.5% a 5% dependendo do prazo
+        - Mínimo: R$ 50,00
+        - Somente comissões confirmadas
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnticipationRequest'
+            example:
+              commission_ids:
+                - "com_abc123"
+                - "com_def456"
+      responses:
+        '201':
+          description: Antecipação criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Anticipation'
+
+  /anticipations/simulate:
+    post:
+      tags: [Antecipações]
+      summary: Simular antecipação
+      description: Calcula os valores de uma antecipação sem efetivá-la
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulateAnticipationRequest'
+      responses:
+        '200':
+          description: Simulação realizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnticipationSimulation'
+              example:
+                original_amount: 100000
+                fee_percentage: 3.5
+                fee_amount: 3500
+                net_amount: 96500
+                available_at: "2026-01-08T10:00:00Z"
+
+  # ==================== WEBHOOKS ====================
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: Listar endpoints de webhook
+      responses:
+        '200':
+          description: Lista de webhooks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookList'
+
+    post:
+      tags: [Webhooks]
+      summary: Criar endpoint de webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+            example:
+              url: "https://seusite.com/webhooks/royalpay"
+              events:
+                - "transaction.paid"
+                - "transaction.refunded"
+                - "subscription.created"
+                - "subscription.cancelled"
+              secret: "whsec_abc123"
+      responses:
+        '201':
+          description: Webhook criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+
+  /webhooks/{webhook_id}:
+    get:
+      tags: [Webhooks]
+      summary: Buscar webhook
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Webhook encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+
+    patch:
+      tags: [Webhooks]
+      summary: Atualizar webhook
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookRequest'
+      responses:
+        '200':
+          description: Webhook atualizado
+
+    delete:
+      tags: [Webhooks]
+      summary: Remover webhook
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Webhook removido
+
+  /webhooks/{webhook_id}/test:
+    post:
+      tags: [Webhooks]
+      summary: Testar webhook
+      description: Envia um evento de teste para o endpoint configurado
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_type:
+                  type: string
+                  example: "transaction.paid"
+      responses:
+        '200':
+          description: Teste enviado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  response_code:
+                    type: integer
+                  response_time_ms:
+                    type: integer
+
+  # ==================== PIXELS ====================
+  /pixels:
+    get:
+      tags: [Pixels]
+      summary: Listar pixels configurados
+      responses:
+        '200':
+          description: Lista de pixels
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixelList'
+
+    post:
+      tags: [Pixels]
+      summary: Criar pixel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePixelRequest'
+            example:
+              product_id: "prod_abc123"
+              pixel_type: "facebook"
+              pixel_id: "123456789"
+              access_token: "EAAG..."
+              events:
+                - "PageView"
+                - "InitiateCheckout"
+                - "Purchase"
+      responses:
+        '201':
+          description: Pixel criado
+
+  /pixels/fire:
+    post:
+      tags: [Pixels]
+      summary: Disparar evento de pixel
+      description: Dispara um evento para todos os pixels configurados
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FirePixelRequest'
+      responses:
+        '200':
+          description: Evento disparado
+
+  # ==================== PROVA SOCIAL ====================
+  /social-proof/notifications:
+    get:
+      tags: [Prova Social]
+      summary: Listar notificações de prova social
+      parameters:
+        - name: product_id
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Lista de notificações
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialProofList'
+
+  /social-proof/config:
+    get:
+      tags: [Prova Social]
+      summary: Buscar configuração de prova social
+      parameters:
+        - name: product_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configuração encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialProofConfig'
+
+    put:
+      tags: [Prova Social]
+      summary: Atualizar configuração de prova social
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSocialProofConfig'
+      responses:
+        '200':
+          description: Configuração atualizada
+
+  # ==================== CALENDÁRIO ====================
+  /calendar/events:
+    get:
+      tags: [Calendário]
+      summary: Listar eventos do calendário
+      parameters:
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: event_type
+          in: query
+          schema:
+            type: string
+            enum: [withdrawal, release, subscription, campaign]
+      responses:
+        '200':
+          description: Lista de eventos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventList'
+
+    post:
+      tags: [Calendário]
+      summary: Criar evento no calendário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCalendarEventRequest'
+      responses:
+        '201':
+          description: Evento criado
+
+  # ==================== AUDITORIA ====================
+  /audit/logs:
+    get:
+      tags: [Auditoria]
+      summary: Listar logs de auditoria
+      description: |
+        Retorna logs de todas as ações financeiras realizadas.
+        
+        **Importante**: Logs são imutáveis e mantidos por 7 anos.
+      parameters:
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+            enum: [transaction, withdrawal, anticipation, refund, split]
+        - name: action_type
+          in: query
+          schema:
+            type: string
+            enum: [create, update, delete, status_change]
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Logs de auditoria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogList'
+
+  /audit/logs/{log_id}:
+    get:
+      tags: [Auditoria]
+      summary: Buscar log específico
+      parameters:
+        - name: log_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Log encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLog'
+
+  /audit/financial-report:
+    get:
+      tags: [Auditoria]
+      summary: Gerar relatório financeiro
+      description: Gera um relatório consolidado de movimentações financeiras
+      parameters:
+        - name: period
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [daily, weekly, monthly, yearly]
+        - name: date_from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, csv, pdf]
+            default: json
+      responses:
+        '200':
+          description: Relatório gerado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinancialReport'
+
+  # ==================== SANDBOX ====================
+  /sandbox/simulate:
+    post:
+      tags: [Sandbox]
+      summary: Simular evento no sandbox
+      description: |
+        **Apenas disponível no ambiente sandbox.**
+        
+        Simula eventos para testes de integração.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxSimulateRequest'
+            examples:
+              payment_approved:
+                summary: Simular pagamento aprovado
+                value:
+                  transaction_id: "tx_test_123"
+                  event: "payment.approved"
+              payment_failed:
+                summary: Simular pagamento recusado
+                value:
+                  transaction_id: "tx_test_123"
+                  event: "payment.failed"
+                  failure_reason: "insufficient_funds"
+              refund:
+                summary: Simular estorno
+                value:
+                  transaction_id: "tx_test_123"
+                  event: "payment.refunded"
+      responses:
+        '200':
+          description: Simulação executada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  event:
+                    type: string
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+
+  /sandbox/reset:
+    post:
+      tags: [Sandbox]
+      summary: Resetar dados do sandbox
+      description: Remove todos os dados de teste do ambiente sandbox
+      responses:
+        '200':
+          description: Sandbox resetado
+
+  /sandbox/webhooks:
+    get:
+      tags: [Sandbox]
+      summary: Listar webhooks enviados no sandbox
+      description: Lista todos os webhooks enviados durante os testes
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Lista de webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido via /auth/token
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Número da página
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    LimitParam:
+      name: limit
+      in: query
+      description: Itens por página
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "bad_request"
+              message: "Requisição inválida"
+              details: []
+
+    Unauthorized:
+      description: Não autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "unauthorized"
+              message: "Token inválido ou expirado"
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: "not_found"
+              message: "Recurso não encontrado"
+
+    ValidationError:
+      description: Erro de validação
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          example:
+            error:
+              code: "validation_error"
+              message: "Dados inválidos"
+              details:
+                - field: "amount"
+                  message: "Valor deve ser maior que zero"
+                - field: "customer.email"
+                  message: "Email inválido"
+
+  schemas:
+    # ========== AUTH ==========
+    AuthTokenRequest:
+      type: object
+      required: [api_key, api_secret]
+      properties:
+        api_key:
+          type: string
+          description: Chave de API pública
+        api_secret:
+          type: string
+          description: Segredo da API
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+          description: Segundos até expiração
+        scope:
+          type: string
+
+    ApiKey:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key_prefix:
+          type: string
+          description: Primeiros caracteres da key
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+
+    CreateApiKeyRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: [read, write, delete]
+
+    ApiKeyCreated:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        key:
+          type: string
+          description: "Chave completa (mostrada apenas uma vez)"
+        secret:
+          type: string
+          description: "Segredo (mostrado apenas uma vez)"
+
+    # ========== CHECKOUT ==========
+    CreateCheckoutRequest:
+      type: object
+      required: [product_id, success_url]
+      properties:
+        product_id:
+          type: string
+        success_url:
+          type: string
+          format: uri
+        cancel_url:
+          type: string
+          format: uri
+        customer:
+          $ref: '#/components/schemas/CustomerInput'
+        coupon_code:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+        metadata:
+          type: object
+          additionalProperties: true
+
+    CheckoutSession:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum: [open, complete, expired]
+        amount:
+          type: integer
+          description: Valor em centavos
+        currency:
+          type: string
+          enum: [BRL]
+        product:
+          $ref: '#/components/schemas/ProductSummary'
+        customer:
+          $ref: '#/components/schemas/Customer'
+        payment_method:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    # ========== TRANSACTION ==========
+    CreateTransactionRequest:
+      type: object
+      required: [amount, payment_method, customer]
+      properties:
+        amount:
+          type: integer
+          minimum: 100
+          description: Valor em centavos (mínimo R$ 1,00)
+        payment_method:
+          type: string
+          enum: [pix, credit_card, boleto]
+        installments:
+          type: integer
+          minimum: 1
+          maximum: 12
+          default: 1
+        card:
+          $ref: '#/components/schemas/CardInput'
+        customer:
+          $ref: '#/components/schemas/CustomerInput'
+        product_id:
+          type: string
+        coupon_code:
+          type: string
+        split:
+          type: array
+          items:
+            $ref: '#/components/schemas/SplitInput'
+        metadata:
+          type: object
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, paid, failed, refunded, chargeback]
+        amount:
+          type: integer
+        net_amount:
+          type: integer
+        fee_amount:
+          type: integer
+        currency:
+          type: string
+        payment_method:
+          type: string
+        installments:
+          type: integer
+        pix_qr_code:
+          type: string
+          description: QR Code para pagamento PIX
+        pix_qr_code_url:
+          type: string
+          format: uri
+        boleto_url:
+          type: string
+          format: uri
+        boleto_barcode:
+          type: string
+        boleto_due_date:
+          type: string
+          format: date
+        card:
+          $ref: '#/components/schemas/CardSummary'
+        customer:
+          $ref: '#/components/schemas/Customer'
+        product:
+          $ref: '#/components/schemas/ProductSummary'
+        refunds:
+          type: array
+          items:
+            $ref: '#/components/schemas/Refund'
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+
+    TransactionList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    RefundRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          description: Valor a estornar (omita para estorno total)
+        reason:
+          type: string
+          maxLength: 500
+
+    Refund:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: integer
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # ========== CUSTOMER ==========
+    CustomerInput:
+      type: object
+      required: [name, email, document]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        email:
+          type: string
+          format: email
+        document:
+          type: string
+          description: CPF ou CNPJ (apenas números)
+        phone:
+          type: string
+        address:
+          $ref: '#/components/schemas/AddressInput'
+
+    Customer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        document:
+          type: string
+        phone:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+
+    AddressInput:
+      type: object
+      properties:
+        street:
+          type: string
+        number:
+          type: string
+        complement:
+          type: string
+        neighborhood:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zip_code:
+          type: string
+        country:
+          type: string
+          default: "BR"
+
+    Address:
+      allOf:
+        - $ref: '#/components/schemas/AddressInput'
+
+    # ========== CARD ==========
+    CardInput:
+      type: object
+      required: [number, holder_name, exp_month, exp_year, cvv]
+      properties:
+        number:
+          type: string
+          pattern: '^\d{13,19}$'
+        holder_name:
+          type: string
+        exp_month:
+          type: string
+          pattern: '^\d{2}$'
+        exp_year:
+          type: string
+          pattern: '^\d{4}$'
+        cvv:
+          type: string
+          pattern: '^\d{3,4}$'
+
+    CardSummary:
+      type: object
+      properties:
+        brand:
+          type: string
+          enum: [visa, mastercard, amex, elo, hipercard]
+        last_digits:
+          type: string
+        holder_name:
+          type: string
+        exp_month:
+          type: string
+        exp_year:
+          type: string
+
+    # ========== PRODUCT ==========
+    ProductSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          type: integer
+        image_url:
+          type: string
+
+    # ========== COUPON ==========
+    CreateCouponRequest:
+      type: object
+      required: [code, discount_type, discount_value]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z0-9_-]+$'
+          maxLength: 50
+        discount_type:
+          type: string
+          enum: [percentage, fixed]
+        discount_value:
+          type: number
+          description: Porcentagem (0-100) ou valor em centavos
+        max_uses:
+          type: integer
+        max_uses_per_user:
+          type: integer
+        min_order_value:
+          type: integer
+        max_discount_value:
+          type: integer
+          description: Limite máximo de desconto em centavos
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        product_ids:
+          type: array
+          items:
+            type: string
+
+    UpdateCouponRequest:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+        max_uses:
+          type: integer
+        ends_at:
+          type: string
+          format: date-time
+
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        discount_type:
+          type: string
+        discount_value:
+          type: number
+        current_uses:
+          type: integer
+        max_uses:
+          type: integer
+        is_active:
+          type: boolean
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    CouponList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coupon'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    ValidateCouponRequest:
+      type: object
+      required: [code, product_id, amount]
+      properties:
+        code:
+          type: string
+        product_id:
+          type: string
+        amount:
+          type: integer
+
+    CouponValidation:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        coupon:
+          $ref: '#/components/schemas/Coupon'
+        discount_amount:
+          type: integer
+        final_amount:
+          type: integer
+        error:
+          type: string
+
+    # ========== SPLIT ==========
+    SplitInput:
+      type: object
+      required: [recipient_id, type, value]
+      properties:
+        recipient_id:
+          type: string
+        type:
+          type: string
+          enum: [percentage, fixed]
+        value:
+          type: number
+
+    CreateSplitRuleRequest:
+      type: object
+      required: [product_id, splits]
+      properties:
+        product_id:
+          type: string
+        splits:
+          type: array
+          items:
+            $ref: '#/components/schemas/SplitInput'
+
+    SplitRule:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        splits:
+          type: array
+          items:
+            type: object
+            properties:
+              recipient_id:
+                type: string
+              recipient_name:
+                type: string
+              type:
+                type: string
+              value:
+                type: number
+        created_at:
+          type: string
+          format: date-time
+
+    SplitRuleList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SplitRule'
+
+    Commission:
+      type: object
+      properties:
+        id:
+          type: string
+        sale_id:
+          type: string
+        amount:
+          type: integer
+        status:
+          type: string
+          enum: [pending, available, anticipated, withdrawn]
+        recipient_id:
+          type: string
+        recipient_name:
+          type: string
+        available_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    CommissionList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Commission'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ========== WITHDRAWAL ==========
+    CreateWithdrawalRequest:
+      type: object
+      required: [amount, bank_account_id]
+      properties:
+        amount:
+          type: integer
+          minimum: 2000
+          description: Valor em centavos (mínimo R$ 20,00)
+        bank_account_id:
+          type: string
+
+    Withdrawal:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: integer
+        fee:
+          type: integer
+        net_amount:
+          type: integer
+        status:
+          type: string
+          enum: [pending, processing, completed, failed, cancelled]
+        bank_account:
+          type: object
+          properties:
+            bank_name:
+              type: string
+            agency:
+              type: string
+            account_number:
+              type: string
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+    WithdrawalList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Withdrawal'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ========== ANTICIPATION ==========
+    CreateAnticipationRequest:
+      type: object
+      required: [commission_ids]
+      properties:
+        commission_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+
+    SimulateAnticipationRequest:
+      type: object
+      required: [commission_ids]
+      properties:
+        commission_ids:
+          type: array
+          items:
+            type: string
+
+    Anticipation:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, completed, cancelled]
+        original_amount:
+          type: integer
+        fee_percentage:
+          type: number
+        fee_amount:
+          type: integer
+        net_amount:
+          type: integer
+        commissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Commission'
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+    AnticipationSimulation:
+      type: object
+      properties:
+        original_amount:
+          type: integer
+        fee_percentage:
+          type: number
+        fee_amount:
+          type: integer
+        net_amount:
+          type: integer
+        available_at:
+          type: string
+          format: date-time
+
+    AnticipationList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Anticipation'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    # ========== WEBHOOK ==========
+    CreateWebhookRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - transaction.created
+              - transaction.paid
+              - transaction.failed
+              - transaction.refunded
+              - transaction.chargeback
+              - subscription.created
+              - subscription.renewed
+              - subscription.cancelled
+              - subscription.expired
+              - withdrawal.completed
+              - withdrawal.failed
+        secret:
+          type: string
+          description: Segredo para validação de assinatura
+
+    UpdateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    WebhookList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Webhook'
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+        webhook_id:
+          type: string
+        event_type:
+          type: string
+        payload:
+          type: object
+        response_code:
+          type: integer
+        response_body:
+          type: string
+        delivered_at:
+          type: string
+          format: date-time
+
+    # ========== PIXEL ==========
+    CreatePixelRequest:
+      type: object
+      required: [product_id, pixel_type, pixel_id]
+      properties:
+        product_id:
+          type: string
+        pixel_type:
+          type: string
+          enum: [facebook, google_analytics, google_ads, tiktok]
+        pixel_id:
+          type: string
+        access_token:
+          type: string
+        measurement_id:
+          type: string
+        conversion_id:
+          type: string
+        conversion_label:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+
+    Pixel:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        pixel_type:
+          type: string
+        pixel_id:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    PixelList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pixel'
+
+    FirePixelRequest:
+      type: object
+      required: [product_id, event_name]
+      properties:
+        product_id:
+          type: string
+        event_name:
+          type: string
+        event_data:
+          type: object
+        transaction_id:
+          type: string
+
+    # ========== SOCIAL PROOF ==========
+    SocialProofNotification:
+      type: object
+      properties:
+        id:
+          type: string
+        product_id:
+          type: string
+        buyer_name:
+          type: string
+        buyer_location:
+          type: string
+        amount:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    SocialProofList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialProofNotification'
+
+    SocialProofConfig:
+      type: object
+      properties:
+        product_id:
+          type: string
+        enabled:
+          type: boolean
+        interval_min:
+          type: integer
+        interval_max:
+          type: integer
+        duration:
+          type: integer
+        notifications:
+          type: array
+          items:
+            type: object
+            properties:
+              enabled:
+                type: boolean
+              text:
+                type: string
+
+    UpdateSocialProofConfig:
+      type: object
+      properties:
+        product_id:
+          type: string
+        enabled:
+          type: boolean
+        interval_min:
+          type: integer
+        interval_max:
+          type: integer
+        duration:
+          type: integer
+
+    # ========== CALENDAR ==========
+    CreateCalendarEventRequest:
+      type: object
+      required: [title, event_date, event_type]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        event_date:
+          type: string
+          format: date
+        event_time:
+          type: string
+        event_type:
+          type: string
+          enum: [withdrawal, release, subscription, campaign, custom]
+        reminder_minutes:
+          type: integer
+        color:
+          type: string
+        metadata:
+          type: object
+
+    CalendarEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        event_date:
+          type: string
+          format: date
+        event_time:
+          type: string
+        event_type:
+          type: string
+        color:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    CalendarEventList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarEvent'
+
+    # ========== AUDIT ==========
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        action_type:
+          type: string
+        user_id:
+          type: string
+        ip_address:
+          type: string
+        old_values:
+          type: object
+        new_values:
+          type: object
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    AuditLogList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    FinancialReport:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        summary:
+          type: object
+          properties:
+            total_transactions:
+              type: integer
+            total_amount:
+              type: integer
+            total_fees:
+              type: integer
+            total_net:
+              type: integer
+            total_refunds:
+              type: integer
+            total_chargebacks:
+              type: integer
+        by_payment_method:
+          type: array
+          items:
+            type: object
+            properties:
+              method:
+                type: string
+              count:
+                type: integer
+              amount:
+                type: integer
+        by_product:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: string
+              product_name:
+                type: string
+              count:
+                type: integer
+              amount:
+                type: integer
+
+    # ========== SANDBOX ==========
+    SandboxSimulateRequest:
+      type: object
+      required: [transaction_id, event]
+      properties:
+        transaction_id:
+          type: string
+        event:
+          type: string
+          enum:
+            - payment.approved
+            - payment.failed
+            - payment.refunded
+            - payment.chargeback
+        failure_reason:
+          type: string
+          enum:
+            - insufficient_funds
+            - card_declined
+            - expired_card
+            - invalid_cvv
+            - fraud_suspected
+
+    # ========== COMMON ==========
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [validation_error]
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string

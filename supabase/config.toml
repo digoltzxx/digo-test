@@ -1,0 +1,118 @@
+project_id = "karrbdetuiiymfwymwaq"
+
+[functions.podpay-webhook]
+verify_jwt = false
+
+[functions.podpay-test-connection]
+verify_jwt = false
+
+[functions.process-checkout]
+verify_jwt = false
+
+[functions.check-transaction]
+verify_jwt = false
+
+[functions.send-otp]
+verify_jwt = false
+
+[functions.verify-otp]
+verify_jwt = false
+
+[functions.reset-password]
+verify_jwt = false
+
+[functions.process-withdrawal]
+verify_jwt = false
+
+[functions.manage-subscription]
+verify_jwt = false
+
+[functions.delete-user]
+verify_jwt = false
+
+[functions.process-deliverables]
+verify_jwt = false
+
+[functions.track-affiliate-click]
+verify_jwt = false
+
+[functions.admin-notify]
+verify_jwt = false
+
+[functions.check-maintenance]
+verify_jwt = false
+
+[functions.auto-approve-bank-account]
+verify_jwt = false
+
+[functions.process-one-click]
+verify_jwt = false
+
+[functions.fire-pixel-events]
+verify_jwt = false
+
+[functions.anticipation-api]
+verify_jwt = false
+
+[functions.send-utmify]
+verify_jwt = false
+
+[functions.integration-dispatch]
+verify_jwt = false
+
+[functions.send-telegram]
+verify_jwt = false
+
+[functions.send-ga4]
+verify_jwt = false
+
+[functions.send-email-marketing]
+verify_jwt = false
+
+[functions.send-whatsapp]
+verify_jwt = false
+
+[functions.send-crm]
+verify_jwt = false
+
+[functions.send-mailerlite]
+verify_jwt = false
+
+[functions.send-ses]
+verify_jwt = false
+
+[functions.verify-recaptcha]
+verify_jwt = false
+
+[functions.verify-fingerprint]
+verify_jwt = false
+
+[functions.log-sentry]
+verify_jwt = false
+
+[functions.send-make]
+verify_jwt = false
+
+[functions.validate-integration]
+verify_jwt = false
+
+[functions.dispatch-integration]
+verify_jwt = false
+
+[functions.security-audit]
+verify_jwt = false
+
+[functions.edtech-webhook]
+verify_jwt = false
+
+[functions.send-pushcut]
+verify_jwt = false
+
+[functions.product-api]
+verify_jwt = false
+
+[functions.delivery-logs-api]
+verify_jwt = false
+
+[functions.impersonate-user]
+verify_jwt = false
